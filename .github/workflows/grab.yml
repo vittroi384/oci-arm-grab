@@ -1,0 +1,44 @@
+name: oci-arm-grab
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  grab:
+    runs-on: ubuntu-latest
+    env:
+      OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
+      OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
+      OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
+      OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+      OCI_CLI_REGION: ${{ secrets.OCI_CLI_REGION }}
+    steps:
+      - name: Install OCI CLI
+        run: pip install oci-cli
+
+      - name: Apply stack
+        run: |
+          JOB=$(oci resource-manager job create-apply-job \
+            --stack-id "${{ secrets.STACK_ID }}" \
+            --execution-plan-strategy AUTO_APPROVED \
+            --query 'data.id' --raw-output)
+          echo "job=$JOB"
+          S=""
+          for i in $(seq 1 40); do
+            S=$(oci resource-manager job get --job-id "$JOB" \
+              --query 'data."lifecycle-state"' --raw-output)
+            echo "state=$S"
+            [ "$S" = SUCCEEDED ] && break
+            [ "$S" = FAILED ] && break
+            sleep 15
+          done
+          echo "FINAL=$S" >> "$GITHUB_ENV"
+
+      - name: Notify Telegram on success
+        if: env.FINAL == 'SUCCEEDED'
+        run: |
+          curl -s "https://api.telegram.org/bot${{ secrets.TG_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TG_CHAT }}" \
+            -d text="🎉 OCI ARM 인스턴스 생성 성공! 콘솔 Compute → Instances 확인하세요."
