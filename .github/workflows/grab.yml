@@ -1,8 +1,6 @@
 name: oci-arm-grab
 
 on:
-  schedule:
-    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -19,6 +17,7 @@ jobs:
         run: pip install oci-cli
 
       - name: Apply stack
+        id: apply
         run: |
           JOB=$(oci resource-manager job create-apply-job \
             --stack-id "${{ secrets.STACK_ID }}" \
@@ -34,11 +33,28 @@ jobs:
             [ "$S" = FAILED ] && break
             sleep 15
           done
-          echo "FINAL=$S" >> "$GITHUB_ENV"
+          echo "final=$S" >> "$GITHUB_OUTPUT"
 
-      - name: Notify Telegram on success
-        if: env.FINAL == 'SUCCEEDED'
+      - name: Notify success (loud)
+        if: steps.apply.outputs.final == 'SUCCEEDED'
         run: |
           curl -s "https://api.telegram.org/bot${{ secrets.TG_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TG_CHAT }}" \
             -d text="🎉 OCI ARM 인스턴스 생성 성공! 콘솔 Compute → Instances 확인하세요."
+
+      - name: Log attempt (silent)
+        if: steps.apply.outputs.final != 'SUCCEEDED'
+        run: |
+          NOW=$(TZ=Asia/Seoul date '+%m/%d %H:%M')
+          curl -s "https://api.telegram.org/bot${{ secrets.TG_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TG_CHAT }}" \
+            -d disable_notification=true \
+            -d text="⏳ [$NOW] 시도함 → 결과: ${{ steps.apply.outputs.final }} (자리 없음, 계속 재시도 중)"
+
+      - name: Wait then trigger next run
+        if: steps.apply.outputs.final != 'SUCCEEDED'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sleep 120
+          gh workflow run grab.yml --repo ${{ github.repository }}
