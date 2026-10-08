@@ -12,6 +12,8 @@
 OCI 의 무료 ARM(Ampere A1) 인스턴스는 인기가 많아 생성 시도가 대부분 "용량 부족"으로 실패합니다.
 성공할 때까지 콘솔에서 사람이 반복 클릭하는 대신, 이 저장소는 **GitHub Actions 워크플로가 스스로를 다시 실행하며** OCI Resource Manager 스택 적용(apply)을 계속 시도합니다. 내 PC 를 켜 둘 필요도, 서버도 필요 없습니다.
 
+실제 결과: 229회·약 22시간 만에 성공(2026-06-04, Actions 탭에서 확인 가능).
+
 ## 동작 방식
 
 1. `workflow_dispatch` 로 워크플로를 한 번 실행하면 `oci-cli` 를 설치하고, 미리 만들어 둔 **Resource Manager 스택**에 apply job 을 생성합니다.
@@ -84,6 +86,7 @@ OCI 의 무료 ARM(Ampere A1) 인스턴스는 인기가 많아 생성 시도가 
 |---|---|
 | `NotAuthenticated` / 401 | API 키 5종 값 재확인 — 특히 `OCI_CLI_KEY_CONTENT` 에 BEGIN/END 줄 포함 여부, 지문 일치 여부 |
 | `NotAuthorizedOrNotFound` | `STACK_ID` 오타이거나 리전이 다른 경우 (스택은 리전 종속) |
+| 인증·`STACK_ID` 오류 | Apply 스텝 자체가 실패하면 뒤 스텝이 전부 건너뛰어져 알림 없이 정지함 (`grab.yml`의 알림·재트리거 스텝은 `steps.apply.outputs.final` 값만 보고 분기). Actions 탭에서 실패한 run 로그를 확인 |
 | apply 가 곧바로 FAILED | 스택 자체 문제 — Resource Manager 에서 수동 Plan/Apply 로 로그 확인 (SSH 키 누락, 서브넷 삭제 등) |
 | `Out of capacity` 반복 | 정상입니다 — 그걸 뚫으려고 도는 중. 수일 걸릴 수 있고, 새벽 시간대 성공률이 높은 편 |
 | 워크플로가 1회만 돌고 멈춤 | Workflow permissions 가 Read and write 인지, `gh workflow run` 단계 로그 확인 |
